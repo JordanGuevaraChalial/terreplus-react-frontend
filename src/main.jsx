@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MapContainer, Marker, Polygon, Popup, TileLayer, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
@@ -8,61 +8,649 @@ import logo from './assets/logo-terreplus.png';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 const TOKEN_KEY = 'auth_token';
+
 const api = async (path, options = {}) => {
   const token = localStorage.getItem(TOKEN_KEY);
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...(token ? { 'x-access-token': token } : {}), ...options.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'x-access-token': token } : {}),
+      ...options.headers,
+    },
   });
+
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message || 'No fue posible completar la solicitud.');
+
+  if (!response.ok) {
+    throw new Error(data.message || 'No fue posible completar la solicitud.');
+  }
+
   return data;
 };
+
 const auth = {
-  async login(email, password) { const data = await api('/auth/signin', { method: 'POST', body: JSON.stringify({ email, password }) }); if (data.accessToken) localStorage.setItem(TOKEN_KEY, data.accessToken); return data; },
-  register: (nombre, email, password, rol) => api('/auth/signup', { method: 'POST', body: JSON.stringify({ nombre, email, password, rol }) }),
+  async login(email, password) {
+    const data = await api('/auth/signin', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (data.accessToken) {
+      localStorage.setItem(TOKEN_KEY, data.accessToken);
+    }
+
+    return data;
+  },
+  register: (nombre, email, password, rol) =>
+    api('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ nombre, email, password, rol }),
+    }),
   profile: () => api('/user/profile'),
   update: (data) => api('/user/profile', { method: 'PUT', body: JSON.stringify(data) }),
   logout: () => localStorage.removeItem(TOKEN_KEY),
 };
+
 const terrain = {
   mine: () => api('/terrain/my-list'),
   create: (data) => api('/terrain', { method: 'POST', body: JSON.stringify(data) }),
-  estimate: (terreno_id) => api('/ml/estimate', { method: 'POST', body: JSON.stringify({ terreno_id, modelo_id: 1 }) }),
+  estimate: (terreno_id) =>
+    api('/ml/estimate', {
+      method: 'POST',
+      body: JSON.stringify({ terreno_id, modelo_id: 1 }),
+    }),
   dashboard: () => api('/dashboard/estadisticas'),
 };
-const marker = new L.Icon({ iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png', shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
 
-function Notice({ notice }) { return notice && <div className={`notice ${notice.type}`}>{notice.text}</div>; }
-function Field({ label, ...props }) { return <label className="field"><span>{label}</span><input {...props} /></label>; }
+const marker = new L.Icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
+
+function Notice({ notice }) {
+  return notice && <div className={`notice ${notice.type}`}>{notice.text}</div>;
+}
+
+function Field({ label, ...props }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input {...props} />
+    </label>
+  );
+}
 
 function Login({ go, onLogin, notify }) {
-  const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [busy, setBusy] = useState(false);
-  async function submit(e) { e.preventDefault(); if (!email || !password) return notify('Completa correo y contraseña.', 'error'); setBusy(true); try { const user = await auth.login(email, password); onLogin(user); } catch (err) { notify(err.message, 'error'); } finally { setBusy(false); } }
-  return <main className="auth"><img src={logo} alt="TerrePlus" /><h1>TerrePlus</h1><p>Tu aliado en terrenos</p><form onSubmit={submit}><Field label="Correo electrónico" type="email" value={email} onChange={e => setEmail(e.target.value)} /><Field label="Contraseña" type="password" value={password} onChange={e => setPassword(e.target.value)} /><button disabled={busy}>{busy ? 'Ingresando…' : 'Iniciar sesión'}</button></form><p>¿No tienes cuenta? <button className="link" onClick={() => go('register')}>Regístrate</button></p></main>;
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!email || !password) {
+      return notify('Completa correo y contraseña.', 'error');
+    }
+
+    setBusy(true);
+    try {
+      const user = await auth.login(email, password);
+      onLogin(user);
+    } catch (err) {
+      notify(err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth">
+      <img src={logo} alt="TerrePlus" />
+      <h1>TerrePlus</h1>
+      <p>Tu aliado en terrenos</p>
+      <form onSubmit={submit}>
+        <Field
+          label="Correo electrónico"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <Field
+          label="Contraseña"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <button disabled={busy}>{busy ? 'Ingresando…' : 'Iniciar sesión'}</button>
+      </form>
+      <p>
+        ¿No tienes cuenta?{' '}
+        <button className="link" onClick={() => go('register')}>
+          Regístrate
+        </button>
+      </p>
+    </main>
+  );
 }
+
 function Register({ go, notify }) {
-  const [form, setForm] = useState({ nombre: '', email: '', password: '', confirm: '', rol: 'agricultor' }), [busy, setBusy] = useState(false);
-  const change = e => setForm({ ...form, [e.target.name]: e.target.value });
-  async function submit(e) { e.preventDefault(); if (Object.values(form).some(v => !v)) return notify('Completa todos los campos.', 'error'); if (form.password.length < 8 || form.password.length > 12 || !/[!@#$%^&*(),.?":{}|<>]/.test(form.password)) return notify('La contraseña debe tener 8–12 caracteres y un símbolo especial.', 'error'); if (form.password !== form.confirm) return notify('Las contraseñas no coinciden.', 'error'); setBusy(true); try { await auth.register(form.nombre, form.email, form.password, form.rol); notify('Registro exitoso. Ahora puedes iniciar sesión.', 'success'); go('login'); } catch (err) { notify(err.message, 'error'); } finally { setBusy(false); } }
-  return <main className="auth"><h1>Crear cuenta</h1><form onSubmit={submit}><Field label="Nombre completo" name="nombre" value={form.nombre} onChange={change} /><Field label="Correo electrónico" type="email" name="email" value={form.email} onChange={change} /><Field label="Contraseña" type="password" name="password" value={form.password} onChange={change} /><Field label="Confirmar contraseña" type="password" name="confirm" value={form.confirm} onChange={change} /><label className="field"><span>Rol</span><select name="rol" value={form.rol} onChange={change}><option value="agricultor">Agricultor</option><option value="inversionista">Inversionista</option></select></label><button disabled={busy}>{busy ? 'Registrando…' : 'Registrarse'}</button></form><button className="link" onClick={() => go('login')}>Volver a iniciar sesión</button></main>;
+  const [form, setForm] = useState({
+    nombre: '',
+    email: '',
+    password: '',
+    confirm: '',
+    rol: 'agricultor',
+  });
+  const [busy, setBusy] = useState(false);
+
+  const change = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  async function submit(e) {
+    e.preventDefault();
+
+    if (Object.values(form).some((v) => !v)) {
+      return notify('Completa todos los campos.', 'error');
+    }
+
+    if (form.password.length < 8 || form.password.length > 12 || !/[!@#$%^&*(),.?":{}|<>]/.test(form.password)) {
+      return notify('La contraseña debe tener 8–12 caracteres y un símbolo especial.', 'error');
+    }
+
+    if (form.password !== form.confirm) {
+      return notify('Las contraseñas no coinciden.', 'error');
+    }
+
+    setBusy(true);
+    try {
+      await auth.register(form.nombre, form.email, form.password, form.rol);
+      notify('Registro exitoso. Ahora puedes iniciar sesión.', 'success');
+      go('login');
+    } catch (err) {
+      notify(err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth">
+      <h1>Crear cuenta</h1>
+      <form onSubmit={submit}>
+        <Field label="Nombre completo" name="nombre" value={form.nombre} onChange={change} />
+        <Field label="Correo electrónico" type="email" name="email" value={form.email} onChange={change} />
+        <Field label="Contraseña" type="password" name="password" value={form.password} onChange={change} />
+        <Field label="Confirmar contraseña" type="password" name="confirm" value={form.confirm} onChange={change} />
+        <label className="field">
+          <span>Rol</span>
+          <select name="rol" value={form.rol} onChange={change}>
+            <option value="agricultor">Agricultor</option>
+            <option value="inversionista">Inversionista</option>
+          </select>
+        </label>
+        <button disabled={busy}>{busy ? 'Registrando…' : 'Registrarse'}</button>
+      </form>
+      <button className="link" onClick={() => go('login')}>
+        Volver a iniciar sesión
+      </button>
+    </main>
+  );
 }
-function LocationPicker({ points, onChange }) { function Click() { useMapEvents({ click(e) { onChange([...points, { lat: e.latlng.lat, lng: e.latlng.lng }]); } }); return null; } const center = points.length ? [points[0].lat, points[0].lng] : [-1.8312, -78.1834]; return <div className="map"><MapContainer center={center} zoom={points.length ? 14 : 6} key={center.join(',')}><TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" /><Click />{points.map((point, index) => <Marker key={index} position={[point.lat, point.lng]} icon={marker} />)}{points.length > 1 && <Polygon positions={points.map(point => [point.lat, point.lng])} />}</MapContainer><small>Haz clic para dibujar el perímetro (mínimo 3 puntos). <button type="button" className="link" onClick={() => onChange(points.slice(0, -1))}>Deshacer</button> <button type="button" className="link" onClick={() => onChange([])}>Limpiar</button></small></div>; }
+
+function LocationPicker({ points, onChange }) {
+  function Click() {
+    useMapEvents({
+      click(e) {
+        onChange([...points, { lat: e.latlng.lat, lng: e.latlng.lng }]);
+      },
+    });
+    return null;
+  }
+
+  const center = points.length ? [points[0].lat, points[0].lng] : [-1.8312, -78.1834];
+
+  return (
+    <div className="map">
+      <MapContainer center={center} zoom={points.length ? 14 : 6} key={center.join(',')}>
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" />
+        <Click />
+        {points.map((point, index) => (
+          <Marker key={index} position={[point.lat, point.lng]} icon={marker} />
+        ))}
+        {points.length > 1 && <Polygon positions={points.map((point) => [point.lat, point.lng])} />}
+      </MapContainer>
+      <small>
+        Haz clic para dibujar el perímetro (mínimo 3 puntos).{' '}
+        <button type="button" className="link" onClick={() => onChange(points.slice(0, -1))}>
+          Deshacer
+        </button>{' '}
+        <button type="button" className="link" onClick={() => onChange([])}>
+          Limpiar
+        </button>
+      </small>
+    </div>
+  );
+}
+
 function Home({ notify, selected }) {
-  const [form, setForm] = useState({ ubicacion_nombre: '', area_hectareas: '', tipo_suelo: '', acceso_riego: false, proximidad_vias_km: '', lat: '', lng: '' }), [polygon, setPolygon] = useState([]), [registeredId, setRegisteredId] = useState(null), [price, setPrice] = useState(null), [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({
+    ubicacion_nombre: '',
+    area_hectareas: '',
+    tipo_suelo: '',
+    acceso_riego: false,
+    proximidad_vias_km: '',
+    lat: '',
+    lng: '',
+  });
+  const [polygon, setPolygon] = useState([]);
+  const [registeredId, setRegisteredId] = useState(null);
+  const [price, setPrice] = useState(null);
+  const [busy, setBusy] = useState(false);
+
   const coordinates = form.lat !== '' && form.lng !== '' ? { lat: Number(form.lat), lng: Number(form.lng) } : null;
-  const setCoordinates = ({ lat, lng }) => setForm(f => ({ ...f, lat: lat.toFixed(6), lng: lng.toFixed(6) }));
-  useEffect(() => { if (selected) { const [lng, lat] = selected.coordenadas?.coordinates || [selected.lng, selected.lat]; setForm(f => ({ ...f, ubicacion_nombre: selected.ubicacion_nombre || '', area_hectareas: String(selected.area_hectareas || ''), tipo_suelo: selected.tipo_suelo || '', acceso_riego: Boolean(selected.acceso_riego), proximidad_vias_km: String(selected.proximidad_vias_km || ''), lat: lat ? String(lat) : '', lng: lng ? String(lng) : '' })); setRegisteredId(selected.id); } }, [selected]);
-  function change(e) { const { name, value, checked, type } = e.target; setRegisteredId(null); setForm(f => ({ ...f, [name]: type === 'checkbox' ? checked : value })); }
-  function updatePolygon(points) { setPolygon(points); if (points.length) setCoordinates({ lat: points.reduce((sum, point) => sum + point.lat, 0) / points.length, lng: points.reduce((sum, point) => sum + point.lng, 0) / points.length }); }
-  async function save() { if (!form.ubicacion_nombre || !coordinates || !form.area_hectareas || !form.tipo_suelo || form.proximidad_vias_km === '' || polygon.length < 3) return notify('Completa los datos y dibuja el perímetro con al menos 3 puntos.', 'error'); setBusy(true); try { const lat = Number(form.lat), lng = Number(form.lng), polyCoords = polygon.map(point => [point.lng, point.lat]); polyCoords.push(polyCoords[0]); const result = await terrain.create({ ...form, area_hectareas: Number(form.area_hectareas), proximidad_vias_km: Number(form.proximidad_vias_km), acceso_riego: form.acceso_riego ? 1 : 0, lat, lng, poligono: { type: 'Polygon', coordinates: [polyCoords] } }); setRegisteredId(result.id); notify('Terreno registrado correctamente.', 'success'); return result.id; } catch (e) { notify(e.message, 'error'); } finally { setBusy(false); } }
-  async function estimate() { const id = registeredId || await save(); if (!id) return; setBusy(true); try { const result = await terrain.estimate(id); const value = Number(result?.valor_estimado_hectarea ?? result?.data?.valor_por_hectarea ?? result?.valor_estimado ?? result?.valor ?? 0); setPrice(value ? `$${value.toFixed(2)} / ha` : 'No se pudo calcular la estimación.'); } catch (e) { notify(e.message, 'error'); } finally { setBusy(false); } }
-  return <section><h1>Gestión de terrenos</h1><p className="muted">Registra tu terreno y obtén una estimación.</p><div className="form-grid"><Field label="Nombre de la ubicación" name="ubicacion_nombre" value={form.ubicacion_nombre} onChange={change} /><Field label="Área (hectáreas)" type="number" min="0" step="any" name="area_hectareas" value={form.area_hectareas} onChange={change} /><label className="field"><span>Tipo de suelo</span><select name="tipo_suelo" value={form.tipo_suelo} onChange={change}><option value="">Selecciona</option><option value="arcilloso">Arcilloso</option><option value="arenoso">Arenoso</option><option value="limoso">Limoso</option><option value="franco">Franco</option></select></label><Field label="Distancia a vías (km)" type="number" min="0" step="any" name="proximidad_vias_km" value={form.proximidad_vias_km} onChange={change} /><label className="check"><input type="checkbox" name="acceso_riego" checked={form.acceso_riego} onChange={change} /> Acceso a riego</label></div><div className="coordinates"><Field label="Latitud" name="lat" type="number" step="any" value={form.lat} onChange={change} /><Field label="Longitud" name="lng" type="number" step="any" value={form.lng} onChange={change} /></div><LocationPicker points={polygon} onChange={updatePolygon} /><div className="actions"><button onClick={save} disabled={busy}>Guardar terreno</button><button className="secondary" onClick={estimate} disabled={busy}>Estimar valor</button></div>{price && <div className="result">Valor estimado: <strong>{price}</strong></div>}</section>;
+
+  const setCoordinates = ({ lat, lng }) =>
+    setForm((f) => ({ ...f, lat: lat.toFixed(6), lng: lng.toFixed(6) }));
+
+  useEffect(() => {
+    if (selected) {
+      const [lng, lat] = selected.coordenadas?.coordinates || [selected.lng, selected.lat];
+      setForm((f) => ({
+        ...f,
+        ubicacion_nombre: selected.ubicacion_nombre || '',
+        area_hectareas: String(selected.area_hectareas || ''),
+        tipo_suelo: selected.tipo_suelo || '',
+        acceso_riego: Boolean(selected.acceso_riego),
+        proximidad_vias_km: String(selected.proximidad_vias_km || ''),
+        lat: lat ? String(lat) : '',
+        lng: lng ? String(lng) : '',
+      }));
+      setRegisteredId(selected.id);
+    }
+  }, [selected]);
+
+  function change(e) {
+    const { name, value, checked, type } = e.target;
+    setRegisteredId(null);
+    setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+  }
+
+  function updatePolygon(points) {
+    setPolygon(points);
+    if (points.length) {
+      setCoordinates({
+        lat: points.reduce((sum, point) => sum + point.lat, 0) / points.length,
+        lng: points.reduce((sum, point) => sum + point.lng, 0) / points.length,
+      });
+    }
+  }
+
+  async function save() {
+    if (!form.ubicacion_nombre || !coordinates || !form.area_hectareas || !form.tipo_suelo || form.proximidad_vias_km === '' || polygon.length < 3) {
+      return notify('Completa los datos y dibuja el perímetro con al menos 3 puntos.', 'error');
+    }
+
+    setBusy(true);
+    try {
+      const lat = Number(form.lat);
+      const lng = Number(form.lng);
+      const polyCoords = polygon.map((point) => [point.lng, point.lat]);
+      polyCoords.push(polyCoords[0]);
+
+      const result = await terrain.create({
+        ...form,
+        area_hectareas: Number(form.area_hectareas),
+        proximidad_vias_km: Number(form.proximidad_vias_km),
+        acceso_riego: form.acceso_riego ? 1 : 0,
+        lat,
+        lng,
+        poligono: { type: 'Polygon', coordinates: [polyCoords] },
+      });
+
+      setRegisteredId(result.id);
+      notify('Terreno registrado correctamente.', 'success');
+      return result.id;
+    } catch (e) {
+      notify(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function estimate() {
+    const id = registeredId || (await save());
+    if (!id) return;
+
+    setBusy(true);
+    try {
+      const result = await terrain.estimate(id);
+      const value = Number(
+        result?.valor_estimado_hectarea ??
+          result?.data?.valor_por_hectarea ??
+          result?.valor_estimado ??
+          result?.valor ??
+          0
+      );
+      setPrice(value ? `$${value.toFixed(2)} / ha` : 'No se pudo calcular la estimación.');
+    } catch (e) {
+      notify(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <h1>Gestión de terrenos</h1>
+      <p className="muted">Registra tu terreno y obtén una estimación.</p>
+      <div className="form-grid">
+        <Field label="Nombre de la ubicación" name="ubicacion_nombre" value={form.ubicacion_nombre} onChange={change} />
+        <Field label="Área (hectáreas)" type="number" min="0" step="any" name="area_hectareas" value={form.area_hectareas} onChange={change} />
+        <label className="field">
+          <span>Tipo de suelo</span>
+          <select name="tipo_suelo" value={form.tipo_suelo} onChange={change}>
+            <option value="">Selecciona</option>
+            <option value="arcilloso">Arcilloso</option>
+            <option value="arenoso">Arenoso</option>
+            <option value="limoso">Limoso</option>
+            <option value="franco">Franco</option>
+          </select>
+        </label>
+        <Field label="Distancia a vías (km)" type="number" min="0" step="any" name="proximidad_vias_km" value={form.proximidad_vias_km} onChange={change} />
+        <label className="check">
+          <input type="checkbox" name="acceso_riego" checked={form.acceso_riego} onChange={change} />
+          Acceso a riego
+        </label>
+      </div>
+      <div className="coordinates">
+        <Field label="Latitud" name="lat" type="number" step="any" value={form.lat} onChange={change} />
+        <Field label="Longitud" name="lng" type="number" step="any" value={form.lng} onChange={change} />
+      </div>
+      <LocationPicker points={polygon} onChange={updatePolygon} />
+      <div className="actions">
+        <button onClick={save} disabled={busy}>
+          Guardar terreno
+        </button>
+        <button className="secondary" onClick={estimate} disabled={busy}>
+          Estimar valor
+        </button>
+      </div>
+      {price && (
+        <div className="result">
+          Valor estimado: <strong>{price}</strong>
+        </div>
+      )}
+    </section>
+  );
 }
-function History({ notify, select }) { const [items, setItems] = useState([]), [loading, setLoading] = useState(true); useEffect(() => { terrain.mine().then(setItems).catch(e => notify(e.message, 'error')).finally(() => setLoading(false)); }, []); return <section><h1>Historial de terrenos</h1>{loading ? <p>Cargando…</p> : <div className="cards">{items.map(t => <article className="card" key={t.id}><h3>{t.ubicacion_nombre || `Terreno #${t.id}`}</h3><p>{t.area_hectareas} ha · {t.tipo_suelo}</p><p>Riego: {t.acceso_riego ? 'Sí' : 'No'} · Vías: {t.proximidad_vias_km} km</p><button onClick={() => select(t)}>Usar para estimación</button></article>)}{!items.length && <p>No hay terrenos registrados.</p>}</div>}</section>; }
-function MapPage({ notify }) { const [items, setItems] = useState([]); useEffect(() => { terrain.mine().then(setItems).catch(e => notify(e.message, 'error')); }, []); const valid = items.filter(t => t.coordenadas?.coordinates); return <section><h1>Mapa de terrenos</h1><div className="map large"><MapContainer center={[-1.8312, -78.1834]} zoom={6}><TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" />{valid.map(t => { const [lng, lat] = t.coordenadas.coordinates; return <Marker key={t.id} position={[lat, lng]} icon={marker}><Popup><strong>{t.ubicacion_nombre || `Terreno #${t.id}`}</strong><br />{t.area_hectareas} ha · {t.tipo_suelo}</Popup></Marker>; })}</MapContainer></div></section>; }
-function Dashboard({ notify }) { const [data, setData] = useState(null); useEffect(() => { terrain.dashboard().then(setData).catch(e => notify(e.message, 'error')); }, []); if (!data) return <section><h1>Estadísticas</h1><p>Cargando…</p></section>; return <section><h1>Estadísticas</h1><div className="kpis">{Object.entries(data.kpis || {}).map(([key, value]) => <article className="card" key={key}><span>{key.replace(/([A-Z])/g, ' $1')}</span><strong>{value}</strong></article>)}</div><div className="cards">{['zonasMasActivas', 'terrenosRecientes', 'distribucionSuelo'].map(key => <article className="card" key={key}><h3>{key.replace(/([A-Z])/g, ' $1')}</h3><ul>{(data[key] || []).map((row, i) => <li key={i}>{Object.values(row).join(' · ')}</li>)}</ul></article>)}</div></section>; }
-function Profile({ notify, go }) { const [data, setData] = useState(null), [file, setFile] = useState(null), [busy, setBusy] = useState(false); useEffect(() => { auth.profile().then(setData).catch(e => notify(e.message, 'error')); }, []); if (!data) return <section><p>Cargando perfil…</p></section>; async function submit(e) { e.preventDefault(); setBusy(true); try { let foto_perfil = data.foto_perfil; if (file) { const body = new FormData(); body.append('file', file); body.append('upload_preset', 'my_default'); const res = await fetch('https://api.cloudinary.com/v1_1/dnhdkn090/image/upload', { method: 'POST', body }); const uploaded = await res.json(); if (!uploaded.secure_url) throw new Error(uploaded.error?.message || 'No se pudo subir la imagen.'); foto_perfil = uploaded.secure_url; } await auth.update({ nombre: data.nombre, foto_perfil, password: data.password || undefined, passwordold: data.passwordold || undefined }); notify('Perfil actualizado.', 'success'); go('support'); } catch (err) { notify(err.message, 'error'); } finally { setBusy(false); } } return <section><h1>Editar perfil</h1><form className="profile" onSubmit={submit}>{data.foto_perfil && <img className="avatar" src={data.foto_perfil} alt="Perfil" />}<Field label="Correo electrónico" value={data.email || ''} disabled /><Field label="Rol" value={data.rol || ''} disabled /><Field label="Nombre" value={data.nombre || ''} onChange={e => setData({ ...data, nombre: e.target.value })} /><label className="field"><span>Foto de perfil</span><input type="file" accept="image/*" onChange={e => setFile(e.target.files[0])} /></label><Field label="Contraseña actual (opcional)" type="password" value={data.passwordold || ''} onChange={e => setData({ ...data, passwordold: e.target.value })} /><Field label="Nueva contraseña (opcional)" type="password" value={data.password || ''} onChange={e => setData({ ...data, password: e.target.value })} /><button disabled={busy}>{busy ? 'Guardando…' : 'Guardar cambios'}</button></form></section>; }
-function Support({ logout, go }) { return <section><h1>Soporte</h1><div className="cards"><article className="card"><h3>Atención al cliente</h3><p>Contáctanos para recibir ayuda con TerrePlus.</p></article><article className="card"><h3>Configuración</h3><button onClick={() => go('profile')}>Editar perfil</button><button className="danger" onClick={logout}>Cerrar sesión</button></article></div></section>; }
-function App() { const [page, setPage] = useState(localStorage.getItem(TOKEN_KEY) ? 'home' : 'login'), [notice, setNotice] = useState(null), [selected, setSelected] = useState(null); const notify = (text, type = 'success') => { setNotice({ text, type }); setTimeout(() => setNotice(null), 5000) }; const logout = () => { auth.logout(); setPage('login'); notify('Sesión cerrada.', 'success') }; const content = page === 'login' ? <Login go={setPage} onLogin={() => setPage('home')} notify={notify} /> : page === 'register' ? <Register go={setPage} notify={notify} /> : page === 'home' ? <Home notify={notify} selected={selected} /> : page === 'history' ? <History notify={notify} select={t => { setSelected(t); setPage('home') }} /> : page === 'map' ? <MapPage notify={notify} /> : page === 'dashboard' ? <Dashboard notify={notify} /> : page === 'profile' ? <Profile notify={notify} go={setPage} /> : <Support logout={logout} go={setPage} />; const nav = ['home', 'history', 'map', 'dashboard', 'support']; return <><Notice notice={notice} />{!['login', 'register'].includes(page) && <header><img src={logo} alt="TerrePlus" /><nav>{nav.map(n => <button className={page === n ? 'active' : ''} onClick={() => setPage(n)} key={n}>{({ home: 'Terrenos', history: 'Historial', map: 'Mapa', dashboard: 'Estadísticas', support: 'Soporte' })[n]}</button>)}</nav></header>}<main className={!['login', 'register'].includes(page) ? 'content' : ''}>{content}</main></> };
+
+function History({ notify, select }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    terrain
+      .mine()
+      .then(setItems)
+      .catch((e) => notify(e.message, 'error'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <section>
+      <h1>Historial de terrenos</h1>
+      {loading ? (
+        <p>Cargando…</p>
+      ) : (
+        <div className="cards">
+          {items.map((t) => (
+            <article className="card" key={t.id}>
+              <h3>{t.ubicacion_nombre || `Terreno #${t.id}`}</h3>
+              <p>
+                {t.area_hectareas} ha · {t.tipo_suelo}
+              </p>
+              <p>
+                Riego: {t.acceso_riego ? 'Sí' : 'No'} · Vías: {t.proximidad_vias_km} km
+              </p>
+              <button onClick={() => select(t)}>Usar para estimación</button>
+            </article>
+          ))}
+          {!items.length && <p>No hay terrenos registrados.</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MapPage({ notify }) {
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    terrain.mine().then(setItems).catch((e) => notify(e.message, 'error'));
+  }, []);
+
+  const valid = items.filter((t) => t.coordenadas?.coordinates);
+
+  return (
+    <section>
+      <h1>Mapa de terrenos</h1>
+      <div className="map large">
+        <MapContainer center={[-1.8312, -78.1834]} zoom={6}>
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" />
+          {valid.map((t) => {
+            const [lng, lat] = t.coordenadas.coordinates;
+            return (
+              <Marker key={t.id} position={[lat, lng]} icon={marker}>
+                <Popup>
+                  <strong>{t.ubicacion_nombre || `Terreno #${t.id}`}</strong>
+                  <br />
+                  {t.area_hectareas} ha · {t.tipo_suelo}
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MapContainer>
+      </div>
+    </section>
+  );
+}
+
+function Dashboard({ notify }) {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    terrain.dashboard().then(setData).catch((e) => notify(e.message, 'error'));
+  }, []);
+
+  if (!data) {
+    return (
+      <section>
+        <h1>Estadísticas</h1>
+        <p>Cargando…</p>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <h1>Estadísticas</h1>
+      <div className="kpis">
+        {Object.entries(data.kpis || {}).map(([key, value]) => (
+          <article className="card" key={key}>
+            <span>{key.replace(/([A-Z])/g, ' $1')}</span>
+            <strong>{value}</strong>
+          </article>
+        ))}
+      </div>
+      <div className="cards">
+        {['zonasMasActivas', 'terrenosRecientes', 'distribucionSuelo'].map((key) => (
+          <article className="card" key={key}>
+            <h3>{key.replace(/([A-Z])/g, ' $1')}</h3>
+            <ul>
+              {(data[key] || []).map((row, i) => (
+                <li key={i}>{Object.values(row).join(' · ')}</li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Profile({ notify, go }) {
+  const [data, setData] = useState(null);
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    auth.profile().then(setData).catch((e) => notify(e.message, 'error'));
+  }, []);
+
+  if (!data) {
+    return <section><p>Cargando perfil…</p></section>;
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      let foto_perfil = data.foto_perfil;
+
+      if (file) {
+        const body = new FormData();
+        body.append('file', file);
+        body.append('upload_preset', 'my_default');
+
+        const res = await fetch('https://api.cloudinary.com/v1_1/dnhdkn090/image/upload', {
+          method: 'POST',
+          body,
+        });
+        const uploaded = await res.json();
+
+        if (!uploaded.secure_url) {
+          throw new Error(uploaded.error?.message || 'No se pudo subir la imagen.');
+        }
+
+        foto_perfil = uploaded.secure_url;
+      }
+
+      await auth.update({
+        nombre: data.nombre,
+        foto_perfil,
+        password: data.password || undefined,
+        passwordold: data.passwordold || undefined,
+      });
+
+      notify('Perfil actualizado.', 'success');
+      go('support');
+    } catch (err) {
+      notify(err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <h1>Editar perfil</h1>
+      <form className="profile" onSubmit={submit}>
+        {data.foto_perfil && <img className="avatar" src={data.foto_perfil} alt="Perfil" />}
+        <Field label="Correo electrónico" value={data.email || ''} disabled />
+        <Field label="Rol" value={data.rol || ''} disabled />
+        <Field label="Nombre" value={data.nombre || ''} onChange={(e) => setData({ ...data, nombre: e.target.value })} />
+        <label className="field">
+          <span>Foto de perfil</span>
+          <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} />
+        </label>
+        <Field label="Contraseña actual (opcional)" type="password" value={data.passwordold || ''} onChange={(e) => setData({ ...data, passwordold: e.target.value })} />
+        <Field label="Nueva contraseña (opcional)" type="password" value={data.password || ''} onChange={(e) => setData({ ...data, password: e.target.value })} />
+        <button disabled={busy}>{busy ? 'Guardando…' : 'Guardar cambios'}</button>
+      </form>
+    </section>
+  );
+}
+
+function Support({ logout, go }) {
+  return (
+    <section>
+      <h1>Soporte</h1>
+      <div className="cards">
+        <article className="card">
+          <h3>Atención al cliente</h3>
+          <p>Contáctanos para recibir ayuda con TerrePlus.</p>
+        </article>
+        <article className="card">
+          <h3>Configuración</h3>
+          <button onClick={() => go('profile')}>Editar perfil</button>
+          <button className="danger" onClick={logout}>
+            Cerrar sesión
+          </button>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function App() {
+  const [page, setPage] = useState(localStorage.getItem(TOKEN_KEY) ? 'home' : 'login');
+  const [notice, setNotice] = useState(null);
+  const [selected, setSelected] = useState(null);
+
+  const notify = (text, type = 'success') => {
+    setNotice({ text, type });
+    setTimeout(() => setNotice(null), 5000);
+  };
+
+  const logout = () => {
+    auth.logout();
+    setPage('login');
+    notify('Sesión cerrada.', 'success');
+  };
+
+  const content =
+    page === 'login' ? (
+      <Login go={setPage} onLogin={() => setPage('home')} notify={notify} />
+    ) : page === 'register' ? (
+      <Register go={setPage} notify={notify} />
+    ) : page === 'home' ? (
+      <Home notify={notify} selected={selected} />
+    ) : page === 'history' ? (
+      <History notify={notify} select={(t) => { setSelected(t); setPage('home'); }} />
+    ) : page === 'map' ? (
+      <MapPage notify={notify} />
+    ) : page === 'dashboard' ? (
+      <Dashboard notify={notify} />
+    ) : page === 'profile' ? (
+      <Profile notify={notify} go={setPage} />
+    ) : (
+      <Support logout={logout} go={setPage} />
+    );
+
+  const nav = ['home', 'history', 'map', 'dashboard', 'support'];
+
+  return (
+    <>
+      <Notice notice={notice} />
+      {!['login', 'register'].includes(page) && (
+        <header>
+          <img src={logo} alt="TerrePlus" />
+          <nav>
+            {nav.map((n) => (
+              <button className={page === n ? 'active' : ''} onClick={() => setPage(n)} key={n}>
+                {{ home: 'Terrenos', history: 'Historial', map: 'Mapa', dashboard: 'Estadísticas', support: 'Soporte' }[n]}
+              </button>
+            ))}
+          </nav>
+        </header>
+      )}
+      <main className={!['login', 'register'].includes(page) ? 'content' : ''}>{content}</main>
+    </>
+  );
+}
+
 createRoot(document.getElementById('root')).render(<App />);
